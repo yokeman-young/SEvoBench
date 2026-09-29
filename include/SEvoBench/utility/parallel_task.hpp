@@ -95,6 +95,17 @@ public:
 
     void notify_all() noexcept { data_cond.notify_all(); }
     void notify_one() noexcept { data_cond.notify_one(); }
+
+    void request_stop(std::atomic<bool>& stop_flag) noexcept {
+        {
+            // Synchronize the predicate change with wait_and_pop's mutex so a
+            // worker cannot miss the final notification between checking the
+            // predicate and entering the condition-variable wait.
+            std::lock_guard<std::mutex> lk(mut);
+            stop_flag.store(true);
+        }
+        data_cond.notify_all();
+    }
 };
 
 } // namespace parallel_task_detail
@@ -173,8 +184,7 @@ public:
     // Request stop and wait for all workers to finish.
     // All previously submitted tasks are guaranteed to be executed.
     void stop_and_wait() noexcept {
-        stop_flag.store(true);
-        tasks.notify_all();   // wake up all workers so they see the stop flag
+        tasks.request_stop(stop_flag);
         for (auto& t : workers) {
             if (t.joinable())
                 t.join();

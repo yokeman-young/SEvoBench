@@ -1,23 +1,27 @@
 
-#include "SEvoBench/sevobench.hpp"
-#include <cassert>
-#include <iostream>
-#include <set>
+#include <SEvoBench/utility/parallel_task.hpp>
 
-template <int N> void test_parallel_task() {
-  auto sz = std::thread::hardware_concurrency();
-  sevobench::parallel_task pool(sz);
-  std::vector<int> ids(N * sz);
-  std::vector<std::future<void>> f(N * sz);
-  for (decltype(sz) i = 0; i < N * sz; i++) {
-    f[i] = pool.submit([&](auto i) { ids[i] = i; }, i);
-  }
-  for (decltype(sz) i = 0; i < N * sz; i++) {
-    f[i].get();
-    if (!(ids[i] == i)) {
-      std::cout << "parallel_task is failed!\n";
+#include <cstdlib>
+#include <future>
+#include <iostream>
+#include <stdexcept>
+#include <vector>
+
+int main() try {
+  for (auto repetition = 0; repetition < 250; ++repetition) {
+    auto pool = sevobench::parallel_task{4};
+    auto futures = std::vector<std::future<int>>{};
+    futures.reserve(24);
+    for (auto value = 0; value < 24; ++value)
+      futures.push_back(pool.submit([value] { return value * value; }));
+    for (auto value = 0; value < 24; ++value) {
+      if (futures[static_cast<std::size_t>(value)].get() != value * value)
+        throw std::runtime_error{"parallel task returned a wrong value"};
     }
   }
+  std::cout << "parallel task lifecycle: pass\n";
+  return EXIT_SUCCESS;
+} catch (std::exception const &error) {
+  std::cerr << "parallel task lifecycle: " << error.what() << '\n';
+  return EXIT_FAILURE;
 }
-
-int main() { test_parallel_task<1>(); }
